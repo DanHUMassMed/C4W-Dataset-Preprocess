@@ -1,49 +1,101 @@
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from functools import lru_cache
 from typing import Protocol
-
+from functools import lru_cache
 import pandas as pd
 import requests
 from tqdm import tqdm
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+WORCESTER_MA_ZIPS = ['01613', '01653', '01655', '01608', '01607', '01609', '01606', '01605', '01602', '01610', '01603', '01604']
+
+# Global session (shared across threads)
+_session = None
+
+
+def get_session():
+    global _session
+
+    if _session is None:
+        session = requests.Session()
+
+        retries = Retry(
+            total=3,
+            backoff_factor=0.5,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET"],
+        )
+
+        adapter = HTTPAdapter(
+            max_retries=retries,
+            pool_connections=50,
+            pool_maxsize=50,
+        )
+
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+
+        _session = session
+
+    return _session
+
 
 
 @lru_cache(maxsize=100_000)
-def geocode(address: str, base_url: str = "http://localhost:8080/search") -> dict:
-    """
-    Geocode a single address using local Nominatim directly via HTTP.
-    """
-    if not address:
+def geocode(address: str, base_url="http://localhost:8080/search") -> dict:
+    if not address.strip():
         return {"latitude": None, "longitude": None, "display_name": None}
 
-    params = {"q": address, "format": "json", "limit": 1}
+    params = {
+        "q": address.strip(),
+        "format": "json",
+        "limit": 1,
+    }
 
-    headers = {"User-Agent": "local-geocoder/1.0"}
+    headers = {
+        "User-Agent": "local-geocoder/1.0",
+    }
+
+    session = get_session()
 
     try:
-        r = requests.get(base_url, params=params, headers=headers, timeout=10)
+        r = session.get(
+            base_url,
+            params=params,
+            headers=headers,
+            timeout=(3, 15),  # connect, read
+        )
+
         r.raise_for_status()
+
         data = r.json()
+
         if not data:
             return {"latitude": None, "longitude": None, "display_name": None}
 
-        # Take the first result
         result = data[0]
+
         return {
             "latitude": result.get("lat"),
             "longitude": result.get("lon"),
             "display_name": result.get("display_name"),
         }
 
-    except requests.RequestException as e:
-        print(f"Error geocoding '{address}': {e}")
-        return {"latitude": None, "longitude": None, "display_name": None}
+    except Exception as e:
+        print(f"Geocode failed: {address} -> {e}")
+
+        return {
+            "latitude": None,
+            "longitude": None,
+            "display_name": None,
+        }
 
 
 # -------------------- Bulk geocoder --------------------
 def geocode_bulk(addresses: list[str], max_workers: int = None) -> list[dict]:
     if max_workers is None:
-        max_workers = min(8, os.cpu_count() or 4)
+        max_workers = 3
 
     results = [None] * len(addresses)
 
@@ -80,14 +132,15 @@ def _safe(val) -> str:
 
 
 def build_address(row) -> str:
-    return (
-        f"{_safe(row.street_number)} "
-        f"{_safe(row.street_name)} "
-        f"{_safe(row.street_type)}, "
-        f"{_safe(row.city)}, "
-        f"{_safe(row.state)} "
-        f"{_safe(row.zip_code)}"
-    ).strip()
+    parts = [
+        _safe(row.street_number),
+        _safe(row.street_name),
+        _safe(row.street_type),
+        _safe(row.city),
+        _safe(row.state),
+        _safe(row.zip_code),
+    ]
+    return " ".join(p for p in parts if p)
 
 
 # -------------------- Main geocode_csv using bulk --------------------

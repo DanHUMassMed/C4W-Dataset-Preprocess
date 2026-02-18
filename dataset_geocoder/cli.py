@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 
+from .geocoder import geocode_csv
 from .zipcoder import zipcode_csv
 
 
@@ -12,7 +13,7 @@ def main():
     )
     args = parser.parse_args()
 
-    # geocode_csv(input_file=args.input, output_file=args.output)
+    geocode_csv(input_file=args.input, output_file=args.output)
     zipcode_csv(input_file=args.input, output_file=args.output)
 
 
