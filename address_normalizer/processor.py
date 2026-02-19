@@ -17,6 +17,15 @@ class CSVProcessor:
         self.output_path = Path(output_path)
         self.pipeline = AddressPipeline()
 
+    def safe_int(self, val):
+        """Convert a float or string to int if possible, else return empty string."""
+        if val is None or val == "":
+            return ""
+        try:
+            return str(int(float(val)))
+        except ValueError:
+            return str(val)  # fallback
+
     def process(self):
         if not self.input_path.exists():
             logger.error(f"Input file not found: {self.input_path}")
@@ -57,14 +66,14 @@ class CSVProcessor:
                     data = self.pipeline.run(raw_address)
 
                     # Enrich row
-                    row["street_number"] = data.get("street_number", "")
-                    row["street_range_to"] = data.get("street_range_to", "")
+                    row["street_number"] = self.safe_int(data.get("street_number", ""))
+                    row["street_range_to"] = self.safe_int(data.get("street_range_to", ""))
                     row["street_extension"] = data.get("street_extension", "")
                     row["street_name"] = data.get("street_name", "")
                     row["street_type"] = data.get("street_type", "")
                     row["unit"] = data.get("unit", "")
-                    row["city"] = data.get("city", "")
-                    row["state"] = data.get("state", "")
+                    row["city"] = data.get("city", "Worcester")
+                    row["state"] = data.get("state", "MA")
                     row["zip_code"] = data.get("zip_code", "")
 
                     # Determine Status

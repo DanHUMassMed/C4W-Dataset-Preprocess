@@ -8,11 +8,8 @@ from tqdm import tqdm
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-WORCESTER_MA_ZIPS = ['01613', '01653', '01655', '01608', '01607', '01609', '01606', '01605', '01602', '01610', '01603', '01604']
-
 # Global session (shared across threads)
 _session = None
-
 
 def get_session():
     global _session
@@ -47,10 +44,16 @@ def geocode(address: str, base_url="http://localhost:8080/search") -> dict:
     if not address.strip():
         return {"latitude": None, "longitude": None, "display_name": None}
 
+    # Only look for addresses in Worcester, MA
+    min_lon, min_lat, max_lon, max_lat = -71.884043, 42.210053, -71.731237, 42.341187
+
     params = {
         "q": address.strip(),
         "format": "json",
         "limit": 1,
+        # Nominatim bounding box (lon1, lat1, lon2, lat2)
+        "viewbox": f"{min_lon},{max_lat},{max_lon},{min_lat}",  # note: top-left, bottom-right
+        "bounded": 1  # restrict results strictly to the viewbox
     }
 
     headers = {
@@ -95,7 +98,7 @@ def geocode(address: str, base_url="http://localhost:8080/search") -> dict:
 # -------------------- Bulk geocoder --------------------
 def geocode_bulk(addresses: list[str], max_workers: int = None) -> list[dict]:
     if max_workers is None:
-        max_workers = 3
+        max_workers = 1 # TODO: We seem to be having a problem with concurrency
 
     results = [None] * len(addresses)
 
@@ -131,6 +134,12 @@ def _safe(val) -> str:
     return str(val).strip()
 
 
+def _safe_street_type(val) -> str:
+    """Convert NaN/None to empty string, else to stripped string."""
+    if pd.isna(val):
+        return ""
+    return str(val).strip()
+
 def build_address(row) -> str:
     parts = [
         _safe(row.street_number),
@@ -154,7 +163,13 @@ def geocode_csv(
     if output_file is None:
         output_file = input_file
 
-    df = pd.read_csv(input_file)
+    df = pd.read_csv(input_file, 
+                        dtype={
+                            "street_number": str,
+                            "street_range_to": str,
+                            "zip_code": str
+                        }
+                    )
 
     # Build all addresses first
     addresses = [build_address(row) for row in df.itertuples(index=False)]
