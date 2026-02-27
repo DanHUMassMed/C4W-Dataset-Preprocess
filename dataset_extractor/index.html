@@ -95,6 +95,45 @@
             overflow-y: auto;
         }
 
+        .publisher-group {
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .publisher-group:last-child {
+            border-bottom: none;
+        }
+
+        .publisher-header {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            cursor: pointer;
+            font-weight: 600;
+            color: #2c3e50;
+            user-select: none;
+            transition: background-color 0.2s;
+            font-size: 16px;
+        }
+
+        .publisher-header:hover {
+            background: #e9ecef;
+        }
+
+        .publisher-count {
+            float: right;
+            font-size: 13px;
+            color: #6c757d;
+            font-weight: normal;
+            background: #e9ecef;
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+
+        .publisher-content {
+            background: white;
+            border-top: 1px solid #e0e0e0;
+        }
+
+
         .dataset-item {
             display: flex;
             padding: 15px;
@@ -127,6 +166,10 @@
             font-weight: 600;
             color: #333;
             margin-bottom: 5px;
+        }
+
+        .dataset-title a:hover {
+            text-decoration: underline !important;
         }
 
         .dataset-description {
@@ -205,23 +248,14 @@
         <div class="controls">
 
             <!-- Search Box -->
-            <input
-                type="text"
-                id="searchInput"
-                class="search-input"
-                placeholder="Filter by title..."
-                oninput="filterDatasets()"
-            >
+            <input type="text" id="searchInput" class="search-input" placeholder="Filter by title..."
+                oninput="filterDatasets()">
 
             <button class="btn-secondary" onclick="selectAll()">Select All</button>
             <button class="btn-secondary" onclick="deselectAll()">Deselect All</button>
+            <button class="btn-secondary" id="collapseToggleBtn" onclick="toggleCollapseAll()">Collapse All</button>
 
-            <button
-                class="btn-primary"
-                id="downloadBtn"
-                onclick="downloadSelected()"
-                disabled
-            >
+            <button class="btn-primary" id="downloadBtn" onclick="downloadSelected()" disabled>
                 Download Selected
             </button>
 
@@ -279,19 +313,20 @@
 
                     return {
                         id: index,
-                        title: values[0] || '',
-                        description: values[1] || '',
-                        accessURL: values[2] || ''
+                        publisher: values[0] || 'Unknown Publisher',
+                        title: values[1] || '',
+                        description: values[2] || '',
+                        accessURL: values[3] || ''
                     };
 
                 });
 
-                // Sort A → Z
-                datasets.sort((a, b) =>
-                    a.title.localeCompare(b.title, undefined, {
-                        sensitivity: 'base'
-                    })
-                );
+                // Sort A → Z by publisher, then title
+                datasets.sort((a, b) => {
+                    const pubDiff = a.publisher.localeCompare(b.publisher, undefined, { sensitivity: 'base' });
+                    if (pubDiff !== 0) return pubDiff;
+                    return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+                });
 
                 // Save master copy
                 allDatasets = [...datasets];
@@ -325,7 +360,7 @@
                 }
 
                 else if (char === ',' && !inQuotes) {
-                    result.push(current.trim());
+                    result.push(current.trim().replace(/^"|"$/g, ''));
                     current = '';
                 }
 
@@ -335,7 +370,7 @@
 
             }
 
-            result.push(current.trim());
+            result.push(current.trim().replace(/^"|"$/g, ''));
 
             return result;
         }
@@ -349,35 +384,55 @@
 
             const listEl = document.getElementById('datasetList');
 
-            listEl.innerHTML = datasets.map(d => `
+            // Group datasets by publisher
+            const grouped = {};
+            for (const d of datasets) {
+                if (!grouped[d.publisher]) {
+                    grouped[d.publisher] = [];
+                }
+                grouped[d.publisher].push(d);
+            }
 
-                <div class="dataset-item">
+            // Sort publishers alphabetically
+            const sortedPublishers = Object.keys(grouped).sort();
 
-                    <input
-                        type="checkbox"
-                        class="dataset-checkbox"
-                        id="dataset-${d.id}"
-                        data-url="${d.accessURL}"
-                        data-title="${escapeHtml(d.title)}"
-                        onchange="updateSelectionCount()"
-                    >
+            let html = '';
+            for (const pub of sortedPublishers) {
+                const pubDatasets = grouped[pub];
 
-                    <div class="dataset-content">
-
-                        <div class="dataset-title">
-                            ${escapeHtml(d.title)}
-                        </div>
-
-                        <div class="dataset-description">
-                            ${escapeHtml(d.description)}
-                        </div>
-
+                html += `
+                <details class="publisher-group" open>
+                    <summary class="publisher-header">
+                        ${escapeHtml(pub)}
+                        <span class="publisher-count">${pubDatasets.length} datasets</span>
+                    </summary>
+                    <div class="publisher-content">
+                        ${pubDatasets.map(d => `
+                            <div class="dataset-item">
+                                <input
+                                    type="checkbox"
+                                    class="dataset-checkbox"
+                                    id="dataset-${d.id}"
+                                    data-url="${d.accessURL}"
+                                    data-title="${escapeHtml(d.title)}"
+                                    onchange="updateSelectionCount()"
+                                >
+                                <div class="dataset-content">
+                                    <div class="dataset-title">
+                                        <a href="${d.accessURL}" target="_blank" rel="noopener noreferrer" style="color: #0066cc; text-decoration: none;">
+                                            ${escapeHtml(d.title)}
+                                        </a>
+                                    </div>
+                                    <div class="dataset-description">${escapeHtml(d.description)}</div>
+                                </div>
+                            </div>
+                        `).join('')}
                     </div>
+                </details>
+                `;
+            }
 
-                </div>
-
-            `).join('');
-
+            listEl.innerHTML = html;
             updateSelectionCount();
         }
 
@@ -444,6 +499,24 @@
 
         }
 
+        let isCollapsed = false;
+
+        function toggleCollapseAll() {
+            isCollapsed = !isCollapsed;
+
+            const detailsElements = document.querySelectorAll('details.publisher-group');
+            detailsElements.forEach(details => {
+                if (isCollapsed) {
+                    details.removeAttribute('open');
+                } else {
+                    details.setAttribute('open', '');
+                }
+            });
+
+            const btn = document.getElementById('collapseToggleBtn');
+            btn.textContent = isCollapsed ? 'Expand All' : 'Collapse All';
+        }
+
 
         function updateSelectionCount() {
 
@@ -498,44 +571,59 @@
             document.getElementById('loading').style.display = 'block';
             document.getElementById('downloadBtn').disabled = true;
 
+            const statusEl = document.getElementById('statusMessage');
+            statusEl.style.display = 'block';
+            statusEl.className = 'status-message info';
+            statusEl.innerHTML = `Starting download of ${selected.length} datasets...<ul id="errorList" style="margin-top:10px; color:#721c24; text-align:left; font-size:13px; font-weight:normal;"></ul>`;
+
+            const loadingText = document.querySelector('#loading p');
+            const errorList = document.getElementById('errorList');
+
+            let successful = 0;
+            let failed = 0;
 
             try {
+                for (let i = 0; i < selected.length; i++) {
+                    const dataset = selected[i];
+                    loadingText.textContent = `Downloading ${i + 1} of ${selected.length}: ${dataset.title}...`;
 
-                const response = await fetch('/download', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ datasets: selected })
-                });
+                    try {
+                        const response = await fetch('/download', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ datasets: [dataset] })
+                        });
 
+                        const result = await response.json();
 
-                const result = await response.json();
-
-
-                if (response.ok) {
-
-                    showMessage(
-                        `Downloaded ${result.successful} of ${result.total}`,
-                        result.failed ? 'info' : 'success'
-                    );
-
-                } else {
-
-                    showMessage(result.error, 'error');
-
+                        if (response.ok && result.successful === 1) {
+                            successful++;
+                        } else {
+                            failed++;
+                            const errorMsg = result.failures?.[0]?.error || result.error || 'Unknown error';
+                            errorList.innerHTML += `<li style="margin-left: 20px;">Failed to download "${dataset.title}": ${errorMsg}</li>`;
+                        }
+                    } catch (err) {
+                        failed++;
+                        errorList.innerHTML += `<li style="margin-left: 20px;">Network error downloading "${dataset.title}": ${err.message}</li>`;
+                    }
                 }
 
-            } catch (err) {
+                loadingText.textContent = 'Downloading datasets...'; // reset
 
-                showMessage(err.message, 'error');
+                statusEl.className = failed ? (successful ? 'status-message info' : 'status-message error') : 'status-message success';
+                statusEl.innerHTML = `<strong>Finished!</strong> Downloaded ${successful} of ${selected.length}.` +
+                    (failed ? `<ul style="margin-top:10px; color:#721c24; text-align:left; font-size:13px;">${errorList.innerHTML}</ul>` : '');
 
-            }
-
-            finally {
+            } finally {
 
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('downloadBtn').disabled = false;
+
+                // If there are no errors, auto-hide the message after 5 seconds.
+                if (failed === 0) {
+                    setTimeout(() => { statusEl.style.display = 'none'; }, 5000);
+                }
 
             }
 

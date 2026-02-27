@@ -6,6 +6,7 @@ Creates a CSV file with title, description, and accessURL for datasets.
 import csv
 import json
 import sys
+import requests
 from pathlib import Path
 from urllib.request import urlopen
 
@@ -13,17 +14,17 @@ from bs4 import BeautifulSoup
 
 
 def fetch_data_catalog(url: str) -> dict:
-    """Fetch the Worcester MA open data catalog JSON."""
     print(f"Fetching data catalog from {url}...")
+
     try:
-        with urlopen(url) as response:
-            data = json.loads(response.read())
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()  # raises HTTPError if 4xx/5xx
         print("Successfully fetched catalog")
-        return data
-    except Exception as e:
+        return response.json()
+
+    except requests.exceptions.RequestException as e:
         print(f"Error fetching catalog: {e}")
         sys.exit(1)
-
 
 def strip_html(text: str) -> str:
     """Remove HTML tags from text and clean up whitespace."""
@@ -60,6 +61,9 @@ def extract_csv_datasets(catalog: dict) -> list[dict]:
         title = dataset.get("title", "")
         description = strip_html(dataset.get("description", ""))
 
+        publisher = dataset.get("publisher", {})
+        publisher_name = publisher.get("name", "")
+
         # Look for CSV distribution
         distributions = dataset.get("distribution", [])
 
@@ -71,6 +75,7 @@ def extract_csv_datasets(catalog: dict) -> list[dict]:
                 if access_url:
                     datasets.append(
                         {
+                            "publisher": publisher_name,
                             "title": title,
                             "description": description,
                             "accessURL": access_url,
@@ -91,6 +96,6 @@ def write_csv(datasets: list[dict], output_file: Path):
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_file, mode="w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["title", "description", "accessURL"])
+        writer = csv.DictWriter(f, fieldnames=["publisher", "title", "description", "accessURL"])
         writer.writeheader()
         writer.writerows(datasets)
