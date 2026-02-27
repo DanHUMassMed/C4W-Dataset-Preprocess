@@ -12,9 +12,12 @@ logger = logging.getLogger(__name__)
 
 
 class CSVProcessor:
-    def __init__(self, input_path: str, output_path: str):
+    def __init__(
+        self, input_path: str, output_path: str, address_column: str = "Address"
+    ):
         self.input_path = Path(input_path)
         self.output_path = Path(output_path)
+        self.address_column = address_column
         self.pipeline = AddressPipeline()
 
     def safe_int(self, val):
@@ -60,14 +63,16 @@ class CSVProcessor:
 
                 for row in reader:
                     total_rows += 1
-                    raw_address = row.get("Address", "")
+                    raw_address = row.get(self.address_column, "")
 
                     # Run Pipeline
                     data = self.pipeline.run(raw_address)
 
                     # Enrich row
                     row["street_number"] = self.safe_int(data.get("street_number", ""))
-                    row["street_range_to"] = self.safe_int(data.get("street_range_to", ""))
+                    row["street_range_to"] = self.safe_int(
+                        data.get("street_range_to", "")
+                    )
                     row["street_extension"] = data.get("street_extension", "")
                     row["street_name"] = data.get("street_name", "")
                     row["street_type"] = data.get("street_type", "")

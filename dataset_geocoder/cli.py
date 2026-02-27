@@ -16,5 +16,6 @@ def main():
     geocode_csv(input_file=args.input, output_file=args.output)
     zipcode_csv(input_file=args.input, output_file=args.output)
 
+
 if __name__ == "__main__":
     main()

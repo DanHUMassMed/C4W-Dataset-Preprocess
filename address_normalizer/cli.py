@@ -12,6 +12,12 @@ def main():
     parser.add_argument(
         "--output", "-o", required=True, help="Path to the output CSV file."
     )
+    parser.add_argument(
+        "--address-column",
+        "-c",
+        default="Address",
+        help="Name of the column containing the address (default: 'Address')",
+    )
 
     args = parser.parse_args()
 
@@ -19,7 +25,9 @@ def main():
     print(f"Output: {args.output}")
 
     try:
-        processor = CSVProcessor(args.input, args.output)
+        processor = CSVProcessor(
+            args.input, args.output, address_column=args.address_column
+        )
         processor.process()
     except Exception as e:
         print(f"Error during processing: {e}")

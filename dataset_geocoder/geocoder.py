@@ -1,15 +1,16 @@
-import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Protocol
 from functools import lru_cache
+from typing import Protocol, TypedDict
+
 import pandas as pd
 import requests
-from tqdm import tqdm
 from requests.adapters import HTTPAdapter
+from tqdm import tqdm
 from urllib3.util.retry import Retry
 
 # Global session (shared across threads)
 _session = None
+
 
 def get_session():
     global _session
@@ -38,7 +39,6 @@ def get_session():
     return _session
 
 
-
 @lru_cache(maxsize=100_000)
 def geocode(address: str, base_url="http://localhost:8080/search") -> dict:
     if not address.strip():
@@ -53,7 +53,7 @@ def geocode(address: str, base_url="http://localhost:8080/search") -> dict:
         "limit": 1,
         # Nominatim bounding box (lon1, lat1, lon2, lat2)
         "viewbox": f"{min_lon},{max_lat},{max_lon},{min_lat}",  # note: top-left, bottom-right
-        "bounded": 1  # restrict results strictly to the viewbox
+        "bounded": 1,  # restrict results strictly to the viewbox
     }
 
     headers = {
@@ -95,12 +95,28 @@ def geocode(address: str, base_url="http://localhost:8080/search") -> dict:
         }
 
 
-# -------------------- Bulk geocoder --------------------
-def geocode_bulk(addresses: list[str], max_workers: int = None) -> list[dict]:
-    if max_workers is None:
-        max_workers = 1 # TODO: We seem to be having a problem with concurrency
+class GeocodeResult(TypedDict):
+    latitude: float | None
+    longitude: float | None
+    display_name: str | None
 
-    results = [None] * len(addresses)
+
+# -------------------- Bulk geocoder --------------------
+def geocode_bulk(
+    addresses: list[str],
+    max_workers: int | None = None,
+) -> list[GeocodeResult]:
+    if max_workers is None:
+        max_workers = 1  # TODO: Investigate concurrency issue
+
+    results: list[GeocodeResult] = [
+        {
+            "latitude": None,
+            "longitude": None,
+            "display_name": None,
+        }
+        for _ in addresses
+    ]
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_map = {
@@ -108,7 +124,9 @@ def geocode_bulk(addresses: list[str], max_workers: int = None) -> list[dict]:
         }
 
         for future in tqdm(
-            as_completed(future_map), total=len(future_map), desc="Geocoding (bulk)"
+            as_completed(future_map),
+            total=len(future_map),
+            desc="Geocoding (bulk)",
         ):
             idx = future_map[future]
             try:
@@ -140,6 +158,7 @@ def _safe_street_type(val) -> str:
         return ""
     return str(val).strip()
 
+
 def build_address(row) -> str:
     parts = [
         _safe(row.street_number),
@@ -163,13 +182,10 @@ def geocode_csv(
     if output_file is None:
         output_file = input_file
 
-    df = pd.read_csv(input_file, 
-                        dtype={
-                            "street_number": str,
-                            "street_range_to": str,
-                            "zip_code": str
-                        }
-                    )
+    df = pd.read_csv(
+        input_file,
+        dtype={"street_number": str, "street_range_to": str, "zip_code": str},
+    )
 
     # Build all addresses first
     addresses = [build_address(row) for row in df.itertuples(index=False)]

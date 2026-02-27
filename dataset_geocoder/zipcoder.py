@@ -27,7 +27,10 @@ def add_zcta_zip(df: pd.DataFrame) -> pd.DataFrame:
     # Create points GeoDataFrame
     points = gpd.GeoDataFrame(
         df,
-        geometry=[Point(lon, lat) for lon, lat in zip(df["longitude"], df["latitude"], strict=True)],
+        geometry=[
+            Point(lon, lat)
+            for lon, lat in zip(df["longitude"], df["latitude"], strict=True)
+        ],
         crs="EPSG:4326",
     )
 
@@ -42,7 +45,6 @@ def add_zcta_zip(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-
 def zipcode_csv(
     input_file: str,
     output_file: str | None = None,
@@ -53,13 +55,10 @@ def zipcode_csv(
     if output_file is None:
         output_file = input_file
 
-    df = pd.read_csv(input_file,
-                     dtype={
-                        "street_number": str,
-                        "street_range_to": str,
-                        "zip_code": str
-                     }
-                    )
+    df = pd.read_csv(
+        input_file,
+        dtype={"street_number": str, "street_range_to": str, "zip_code": str},
+    )
 
     df = add_zcta_zip(df)
     df.to_csv(output_file, index=False)

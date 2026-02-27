@@ -4,12 +4,10 @@ Creates a CSV file with title, description, and accessURL for datasets.
 """
 
 import csv
-import json
 import sys
-import requests
 from pathlib import Path
-from urllib.request import urlopen
 
+import requests
 from bs4 import BeautifulSoup
 
 
@@ -25,6 +23,7 @@ def fetch_data_catalog(url: str) -> dict:
     except requests.exceptions.RequestException as e:
         print(f"Error fetching catalog: {e}")
         sys.exit(1)
+
 
 def strip_html(text: str) -> str:
     """Remove HTML tags from text and clean up whitespace."""
@@ -96,6 +95,8 @@ def write_csv(datasets: list[dict], output_file: Path):
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_file, mode="w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["publisher", "title", "description", "accessURL"])
+        writer = csv.DictWriter(
+            f, fieldnames=["publisher", "title", "description", "accessURL"]
+        )
         writer.writeheader()
         writer.writerows(datasets)

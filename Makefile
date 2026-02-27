@@ -15,6 +15,9 @@ dev:
 lint: check-venv
 	$(RUFF) format .
 	$(RUFF) check .
+	$(MYPY) ./address_normalizer
+	$(MYPY) ./dataset_extractor
+	$(MYPY) ./dataset_geocoder
 
 run-extract: check-venv
 	$(PYTHON) -m dataset_extractor.cli --input data/raw/$(PDF) --output data/processed/Extracted_$(PDF)
